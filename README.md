@@ -105,21 +105,19 @@ copy .env.example .env
 ### 方式 1：直接运行（开发）
 
 ```bash
-python -m webui_llm_proxy
+python -m webui_llm_proxy                         # 对话结束后，默认删除会话
 # 或
-python -m webui_llm_proxy --port 8080 --keep-chat # 保留会话模式（默认不删除会话）
-
+python -m webui_llm_proxy --port 8080 --keep-chat # 对话结束后，保留会话模式（不删除会话）
 python -m webui_llm_proxy --port 8080 --models gemini,kimi --keep-chat
 ```
 
 ### 方式 2：Windows 脚本
 
 ```bash
-scripts\start.bat           # 启动
-scripts\start.bat --keep-chat  # 保留会话模式
-scripts\stop.bat            # 停止
-scripts\status.bat          # 查看状态
-
+scripts\start.bat              # 启动
+scripts\start.bat --keep-chat  # 对话结束后，保留会话模式（不删除会话）
+scripts\stop.bat               # 停止
+scripts\status.bat             # 查看状态
 scripts\start.bat --models "gemini,kimi" --keep-chat
 ```
 
