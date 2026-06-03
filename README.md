@@ -1,8 +1,6 @@
 # WebUI LLM Proxy
 
-一个基于设计模式重构的 Web UI LLM 代理服务器，通过 Playwright 控制 Kimi、Gemini 等网页版 LLM，对外暴露 **OpenAI 兼容的 `/v1/chat/completions` API**。
-
-> 本项目是 `gemini_proxy` 的系统性重构版本，应用了 8 种经典设计模式，实现了模块化、可扩展、类型安全的架构。
+一个 Web UI LLM 代理服务器，通过 Playwright 控制 Kimi、Gemini 等网页版 LLM，对外暴露 **OpenAI 兼容的 `/v1/chat/completions` API**。
 
 ---
 
