@@ -94,6 +94,7 @@ pip install -e ".[dev]"
 
 # 4. 安装 Playwright 浏览器
 playwright install chromium
+# 注意：最好直接用chrome浏览器——gemini不允许在chromium中进行登录。
 
 # 5. 复制环境变量模板
 copy .env.example .env
