@@ -21,6 +21,27 @@
 
 ---
 
+## 核心功能
+
+| 特性 | 说明 |
+|------|------|
+| **多模型后端** | 支持 Kimi（moonshot）和 Gemini Web UI，通过 `model` 参数自动路由 |
+| **OpenAI 兼容 API** | 提供 `/v1/chat/completions`、`/v1/models` 等标准接口 |
+| **浏览器实例池** | 每个模型可配置 N 个独立 Chrome 实例（`PROXY_BROWSER_POOL_SIZE`），支持并发请求 |
+| **流式/非流式输出** | `stream=true/false` 自由切换，流式返回 SSE 事件流 |
+| **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`） |
+| **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择快速/思考/Agent/Agent集群模式 |
+| **API Key 认证** | Bearer Token 校验，支持逗号分隔多个 Key |
+| **记忆管理** | 短期记忆（最近 N 轮）+ 长期记忆（自动压缩） |
+| **事件驱动架构** | EventBus + 观察者模式，支持使用台账、媒体提取等插件 |
+| **媒体文件自动提取** | 从 Kimi/Gemini 回复中自动下载图片到 `/media` |
+| **编码修复** | 自动修复 Windows curl 发送的 multipart form-data 中文乱码 |
+| **调试接口** | 编码测试、Gemini/Kimi 页面截图 |
+| **CLI 守护进程** | `start/stop/restart/status/logs` 命令行管理 |
+| **Windows 启动脚本** | `start.bat`、`stop.bat`、`status.bat` 一键启停 |
+
+---
+
 ## 项目结构
 
 ```
