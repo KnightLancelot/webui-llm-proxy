@@ -6,21 +6,6 @@
 
 ---
 
-## 设计模式应用
-
-| 设计模式 | 应用位置 | 解决的问题 |
-|----------|----------|-----------|
-| **模板方法模式** | `clients/base.py` | Gemini/Kimi 客户端 60%+ 重复代码 → 提取公共骨架到基类 |
-| **抽象工厂模式** | `clients/factory.py` | 硬编码模型路由 → 注册式动态创建客户端 |
-| **策略模式** | `core/detection_strategies.py` | 回复完成判定逻辑混杂 → 可插拔检测策略 |
-| **适配器模式** | `adapters/` | 请求/响应格式转换无统一接口 → 抽象适配器接口 |
-| **观察者模式** | `core/event_bus.py` | 记忆/日志/媒体提取耦合 → 事件驱动解耦 |
-| **单例模式** | `core/memory.py`, `config.py` | 全局变量隐式依赖 → 显式单例 + 类型安全配置 |
-| **装饰器模式** | `api/dependencies.py` | 认证/编码修复混杂在路由中 → FastAPI Depends 注入 |
-| **依赖注入** | `api/server.py` | `gemini`/`kimi` 全局变量 → lifespan + app.state DI |
-
----
-
 ## 核心功能
 
 | 特性 | 说明 |
