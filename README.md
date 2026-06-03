@@ -107,7 +107,9 @@ copy .env.example .env
 ```bash
 python -m webui_llm_proxy
 # 或
-python -m webui_llm_proxy --port 8080 --keep-chat
+python -m webui_llm_proxy --port 8080 --keep-chat # 保留会话模式（默认不删除会话）
+
+python -m webui_llm_proxy --port 8080 --models gemini,kimi --keep-chat
 ```
 
 ### 方式 2：Windows 脚本
@@ -117,6 +119,8 @@ scripts\start.bat           # 启动
 scripts\start.bat --keep-chat  # 保留会话模式
 scripts\stop.bat            # 停止
 scripts\status.bat          # 查看状态
+
+scripts\start.bat --models "gemini,kimi" --keep-chat
 ```
 
 ### 方式 3：CLI 守护进程
