@@ -102,6 +102,10 @@ class UploadSettings(BaseSettings):
             '.pdf', '.txt', '.md', '.csv', '.json', '.docx', '.xlsx',
             '.mp3', '.wav', '.m4a', '.ogg', '.flac',
             '.mp4', '.mov', '.avi', '.mkv', '.webm',
+            # 代码文件
+            '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp',
+            '.go', '.rs', '.rb', '.php', '.sh', '.sql', '.yaml', '.yml',
+            '.html', '.htm', '.css', '.xml',
         }
 
     @property
@@ -164,6 +168,7 @@ class Settings(BaseSettings):
     log: LogSettings = Field(default_factory=LogSettings)
     keep_chat: bool = Field(default=False, description="会话结束后保留对话页面")
     enabled_models: str = Field(default="gemini,kimi", description="启用的模型代理，逗号分隔（如 gemini,kimi）")
+    media_dir: str = Field(default="./data/downloads", description="自动下载的媒体文件保存目录")
 
     @property
     def enabled_model_list(self) -> list[str]:

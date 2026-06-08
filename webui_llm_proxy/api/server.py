@@ -8,6 +8,7 @@ FastAPI 应用入口 — 依赖注入 (Dependency Injection)
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -92,9 +93,8 @@ def create_app() -> FastAPI:
     )
 
     # 静态文件服务（媒体文件）
-    import os
-    os.makedirs("./data/media", exist_ok=True)
-    app.mount("/media", StaticFiles(directory="./data/media"), name="media")
+    os.makedirs(settings.media_dir, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
 
     # 注册路由
     from webui_llm_proxy.api.routes import chat, upload, models, memory, debug

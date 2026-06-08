@@ -12,8 +12,10 @@
 | **OpenAI 兼容 API** | 提供 `/v1/chat/completions`、`/v1/models` 等标准接口 |
 | **浏览器实例池** | 每个模型可配置 N 个独立 Chrome 实例（`PROXY_BROWSER_POOL_SIZE`），支持并发请求 |
 | **流式/非流式输出** | `stream=true/false` 自由切换，流式返回 SSE 事件流 |
-| **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`） |
+| **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`），包括代码文件（`.py` `.js` `.ts` `.java` `.c` `.cpp` 等） |
 | **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择快速/思考/Agent/Agent集群模式 |
+| **Sandbox 文件自动下载** | Kimi 生成的 Excel/Word/PPT/CSV 等 sandbox 文件，自动下载并返回可访问 URL |
+| **会话保留策略** | 检测到未下载文件时自动保留会话，方便用户手动下载 |
 | **API Key 认证** | Bearer Token 校验，支持逗号分隔多个 Key |
 
 ---
@@ -51,7 +53,7 @@ webui_llm_proxy/
 │       └── debug_selectors.py # DOM 选择器调试
 ├── data/                      # 运行时数据（.gitignore）
 │   ├── uploads/               # 临时上传文件
-│   ├── media/                 # 提取的媒体文件（静态服务 /media）
+│   ├── downloads/             # 自动下载的文件（静态服务 /media）
 │   ├── logs/                  # 使用台账日志
 │   └── memory.json            # 长期记忆
 ├── tests/                     # 单元测试（pytest）
@@ -248,6 +250,33 @@ curl http://localhost:8080/v1/chat/completions/upload \
   -F "model=kimi-k2.6-fast"
 ```
 
+**上传文件类型白名单**：`.png` `.jpg` `.jpeg` `.gif` `.webp` `.bmp` `.pdf` `.txt` `.md` `.csv` `.json` `.docx` `.xlsx` `.mp3` `.wav` `.m4a` `.ogg` `.flac` `.mp4` `.mov` `.avi` `.mkv` `.webm` `.py` `.js` `.ts` `.java` `.c` `.cpp` `.h` `.hpp` `.go` `.rs` `.rb` `.php` `.sh` `.sql` `.yaml` `.yml` `.html` `.htm` `.css` `.xml`
+
+### 文件下载（Kimi Sandbox 文件）
+
+当 Kimi 生成文件（如 Excel、Word、PPT、CSV）时，服务会自动检测并下载到本地：
+
+```json
+{
+  "choices": [{
+    "message": {
+      "content": "已为您生成表格...",
+      "media_files": [
+        {
+          "type": "spreadsheet",
+          "path": "/media/***.xlsx",
+          "filename": "***.xlsx",
+          "local_path": "./data/downloads/***.xlsx"
+        }
+      ]
+    }
+  }]
+}
+```
+
+- `path`：通过 `http://localhost:8080/media/<filename>` 可直接访问
+- 若自动下载失败，会话会被**自动保留**，用户可在浏览器中手动下载
+
 ### Python OpenAI SDK
 
 ```python
@@ -285,6 +314,7 @@ print(response.choices[0].message.content)
 | `PROXY_CHROME_EXECUTABLE` | `C:\Program Files\Google\Chrome\Application\chrome.exe` | Chrome 路径 |
 | `PROXY_GEMINI_CHAT_URL` | `https://gemini.google.com/app` | Gemini 页面 |
 | `PROXY_KIMI_CHAT_URL` | `https://kimi.moonshot.cn` | Kimi 页面 |
+| `PROXY_MEDIA_DIR` | `./data/downloads` | 自动下载文件的保存目录 |
 
 ### 并发配置（浏览器实例池）
 
