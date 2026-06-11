@@ -1379,6 +1379,10 @@ class KimiClient(BaseLLMClient):
     # ==================== Cleanup ====================
 
     async def _cleanup_after_send(self) -> None:
+        if self._cleanup_called:
+            logger.warning("_cleanup_after_send called twice, skipping")
+            return
+        self._cleanup_called = True
         if settings.keep_chat:
             logger.info("KEEP_CHAT=true, preserving session")
         elif self.has_undownloadable_files:

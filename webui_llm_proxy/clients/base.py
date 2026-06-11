@@ -43,6 +43,7 @@ class BaseLLMClient(ABC):
         self._initialized = False
         self.last_media_files: list[dict] = []
         self.has_undownloadable_files: bool = False
+        self._cleanup_called: bool = False
 
     # ==================== 公共属性 ====================
 

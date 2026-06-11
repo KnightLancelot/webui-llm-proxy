@@ -28,16 +28,13 @@ if not "%~1"=="" goto :parse_args
 
 :: Windows cmd treats comma as arg separator; collect following non-flag args
 :collect_models
-if not "%~1"=="" (
-    set "ARG=%~1"
-    set "FIRST_CHAR=!ARG:~0,1!"
-    if not "!FIRST_CHAR!"=="-" (
-        set "MODELS_FLAG=!MODELS_FLAG!,!ARG!"
-        shift
-        goto :collect_models
-    )
-)
-goto :parse_args_done
+if "%~1"=="" goto :parse_args_done
+set "ARG=%~1"
+set "FIRST_CHAR=!ARG:~0,1!"
+if "!FIRST_CHAR!"=="-" goto :parse_args
+set "MODELS_FLAG=!MODELS_FLAG!,!ARG!"
+shift
+goto :collect_models
 :parse_args_done
 
 :: Ensure directories exist
