@@ -42,6 +42,7 @@ class BaseLLMClient(ABC):
         self._detection = detection_strategy
         self._initialized = False
         self.last_media_files: list[dict] = []
+        self.last_reasoning_content: str = ""
         self.has_undownloadable_files: bool = False
         self._cleanup_called: bool = False
 
@@ -128,6 +129,7 @@ class BaseLLMClient(ABC):
 
         response_text = await self._wait_for_complete_response()
 
+        self.last_reasoning_content = await self._extract_reasoning_text() or ""
         await self._extract_media_files()
         await self._cleanup_after_send()
 
@@ -178,6 +180,7 @@ class BaseLLMClient(ABC):
             async for chunk in self._stream_response(on_chunk):
                 yield chunk
         finally:
+            self.last_reasoning_content = await self._extract_reasoning_text() or ""
             await self._extract_media_files()
             await self._cleanup_after_send()
 
@@ -231,6 +234,7 @@ class BaseLLMClient(ABC):
     def _reset_state(self) -> None:
         """重置每次请求的状态"""
         self.last_media_files = []
+        self.last_reasoning_content = ""
         self.has_undownloadable_files = False
 
     async def _handle_login(self) -> None:
@@ -449,6 +453,13 @@ class BaseLLMClient(ABC):
         默认空实现，Kimi 子类重写
         """
         pass
+
+    async def _extract_reasoning_text(self) -> str:
+        """
+        提取推理内容（可选钩子）
+        默认空实现，Kimi 子类重写
+        """
+        return ""
 
     async def _cleanup_after_send(self) -> None:
         """

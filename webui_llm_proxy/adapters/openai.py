@@ -100,6 +100,8 @@ class OpenAIResponseAdapter(ResponseAdapter):
             "role": "assistant",
             "content": response.content,
         }
+        if response.reasoning_content:
+            message["reasoning_content"] = response.reasoning_content
         if response.media_files:
             message["custom_content"] = {
                 "media_files": [

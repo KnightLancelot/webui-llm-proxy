@@ -37,11 +37,13 @@ class ChatResponse:
     content: str
     model: str
     media_files: list[MediaFile] = field(default_factory=list)
+    reasoning_content: str = ""
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "content": self.content,
             "model": self.model,
+            "reasoning_content": self.reasoning_content,
             "media_files": [
                 {
                     "filename": m.filename,
@@ -53,3 +55,4 @@ class ChatResponse:
                 for m in self.media_files
             ],
         }
+        return result

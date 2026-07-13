@@ -14,6 +14,7 @@
 | **流式/非流式输出** | `stream=true/false` 自由切换，流式返回 SSE 事件流 |
 | **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`），包括代码文件（`.py` `.js` `.ts` `.java` `.c` `.cpp` 等） |
 | **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择快速/思考/Agent/Agent集群模式 |
+| **思考模型推理分离** | 使用 `kimi-k2.6-think` 等思考模型时，推理内容放入 `reasoning_content`，正式回答放入 `content` |
 | **Sandbox 文件自动下载** | Kimi 生成的 Excel/Word/PPT/CSV 等 sandbox 文件，自动下载并返回可访问 URL |
 | **会话保留策略** | 检测到未下载文件时自动保留会话，方便用户手动下载 |
 | **API Key 认证** | Bearer Token 校验，支持逗号分隔多个 Key |
@@ -276,6 +277,26 @@ curl http://localhost:8080/v1/chat/completions/upload \
 
 - `path`：通过 `http://localhost:8080/media/<filename>` 可直接访问
 - 若自动下载失败，会话会被**自动保留**，用户可在浏览器中手动下载
+
+### 思考模型推理内容
+
+当使用 Kimi 思考模型（如 `kimi-k2.6-think`、`moonshot-k2.6-think`）时，服务会自动将页面中的推理过程和正式回答分离：
+
+```json
+{
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": "正式回答内容...",
+      "reasoning_content": "推理过程内容..."
+    }
+  }]
+}
+```
+
+- `content`：模型最终输出结果（对应页面 `class="markdown-container"`）
+- `reasoning_content`：模型推理过程（对应页面 `class="container-block"`）
+- 非思考模型返回的 `reasoning_content` 为空字符串
 
 ### Python OpenAI SDK
 

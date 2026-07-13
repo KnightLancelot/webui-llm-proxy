@@ -98,7 +98,7 @@ async def chat_completions(
                 stream = adapter.stream_response(
                     msg_stream,
                     model=model,
-                    custom_content={"media_files": client.last_media_files} if client.last_media_files else None,
+                    custom_content={"media_files": client.last_media_files, "reasoning_content": client.last_reasoning_content} if client.last_media_files or client.last_reasoning_content else None,
                 )
 
                 try:
@@ -161,6 +161,7 @@ async def chat_completions(
                 content=response_text,
                 model=model,
                 media_files=media_files,
+                reasoning_content=client.last_reasoning_content,
             )
 
             memory.add_message("assistant", response_text)

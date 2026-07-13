@@ -133,6 +133,7 @@ class KimiClient(BaseLLMClient):
             poll_interval_ms=settings.kimi.poll_interval_ms,
         )
         super().__init__(browser, detection)
+        self.model_name: str = ""
 
     # ==================== Required hooks ====================
 
@@ -584,8 +585,34 @@ class KimiClient(BaseLLMClient):
 
     # ==================== Text extraction ====================
 
+    def _is_think_model(self) -> bool:
+        """判断当前是否为思考模型"""
+        return bool(
+            self.model_name
+            and ("think" in self.model_name.lower() or "思考" in self.model_name)
+        )
+
     async def _extract_response_text(self, skip_count: int = 0) -> str:
         page = self._get_page()
+
+        # ===== 思考模型：只返回正式回答（markdown-container）=====
+        if self._is_think_model():
+            try:
+                boxes = await page.locator(".segment-content-box").all()
+                if boxes:
+                    box = boxes[-1]
+                    try:
+                        answer_locator = box.locator(".markdown-container").last
+                        if await answer_locator.count() > 0:
+                            answer_text = (await answer_locator.text_content() or "").strip()
+                            if answer_text:
+                                return answer_text
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # ===== 非思考模型 / fallback =====
         precise_selectors = [
             ".chat-content-item-assistant",
             ".segment-assistant",
@@ -601,6 +628,27 @@ class KimiClient(BaseLLMClient):
                         return text.strip()
             except Exception:
                 continue
+        return ""
+
+    async def _extract_reasoning_text(self) -> str:
+        """提取思考模型的推理内容（container-block）"""
+        if not self._is_think_model():
+            return ""
+
+        page = self._get_page()
+        try:
+            boxes = await page.locator(".segment-content-box").all()
+            if boxes:
+                box = boxes[-1]
+                try:
+                    think_locator = box.locator(".container-block").last
+                    if await think_locator.count() > 0:
+                        think_text = (await think_locator.text_content() or "").strip()
+                        return think_text
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return ""
 
     # ==================== Media extraction ====================
@@ -1418,6 +1466,7 @@ class KimiClient(BaseLLMClient):
         在 Kimi 页面选择模型模式（K2.6 快速 / 思考 / Agent / Agent 集群）
         通过 JS 动态探测下拉菜单坐标，使用 Playwright mouse.click() 点击
         """
+        self.model_name = model_name or ""
         if not model_name:
             return
 
