@@ -53,6 +53,8 @@ class TestModelsEndpoint:
         assert data["object"] == "list"
         assert len(data["data"]) >= 5
         model_ids = [m["id"] for m in data["data"]]
+        assert "kimi-k3-max" in model_ids
+        assert "kimi-k3-cluster-max" in model_ids
         assert "kimi-k2.6-fast" in model_ids
         assert "gemini-pro-via-proxy" in model_ids
 

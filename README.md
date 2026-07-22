@@ -13,8 +13,8 @@
 | **浏览器实例池** | 每个模型可配置 N 个独立 Chrome 实例（`PROXY_BROWSER_POOL_SIZE`），支持并发请求 |
 | **流式/非流式输出** | `stream=true/false` 自由切换，流式返回 SSE 事件流 |
 | **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`），包括代码文件（`.py` `.js` `.ts` `.java` `.c` `.cpp` 等） |
-| **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择快速/思考/Agent/Agent集群模式 |
-| **思考模型推理分离** | 使用 `kimi-k2.6-think` 等思考模型时，推理内容放入 `reasoning_content`，正式回答放入 `content` |
+| **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择 K3 / K3 集群 / K2.6 |
+| **推理内容分离** | 使用 K3 系列等模型时，推理内容放入 `reasoning_content`，正式回答放入 `content` |
 | **Sandbox 文件自动下载** | Kimi 生成的 Excel/Word/PPT/CSV 等 sandbox 文件，自动下载并返回可访问 URL |
 | **会话保留策略** | 检测到未下载文件时自动保留会话，方便用户手动下载 |
 | **API Key 认证** | Bearer Token 校验，支持逗号分隔多个 Key |
@@ -140,7 +140,7 @@ python -m webui_llm_proxy.cli.server logs
 
 | 平台 | `model` 名称前缀 | 说明 |
 |------|-----------------|------|
-| **Kimi** | `kimi` | Kimi K2.6 系列，支持通过名称自动切换快速/思考/Agent 模式 |
+| **Kimi** | `kimi` | Kimi K3 / K2.6 系列，支持通过名称自动切换 K3 / K3 集群 / K2.6 |
 | **Kimi** | `moonshot` | Moonshot 官方名称，同样映射到 Kimi 客户端 |
 | **Gemini** | `gemini` | Google Gemini Web UI |
 
@@ -152,15 +152,16 @@ Kimi 客户端会根据 `model` 名称中的关键词自动在网页上切换对
 
 | `model` 名称关键词 | 实际选择的 Kimi 模型 |
 |-------------------|---------------------|
-| 包含 `think` / `思考` | **K2.6 思考** |
-| 包含 `fast` / `快速` | **K2.6 快速** |
-| 包含 `agent-cluster` / `集群` | **Agent 集群** |
-| 包含 `agent` | **Agent** |
-| 仅包含 `kimi`（无上述关键词） | **K2.6 快速**（默认） |
+| 包含 `fast` / `快速` / `k2.6` | **K2.6** |
+| 包含 `max` / `k3` | **K3** |
+| 包含 `cluster` / `集群` | **K3 集群** |
+| 包含 `think` / `思考` / `agent`（旧模式已下线） | 回退为 **K3** |
+| 仅包含 `kimi` / `moonshot`（无上述关键词） | **K2.6**（默认） |
 
 示例：
-- `"model": "kimi-k2.6-think"` → 自动切换为 **K2.6 思考**
-- `"model": "kimi"` → 使用 **K2.6 快速**
+- `"model": "kimi-k3-cluster-max"` → 自动切换为 **K3 集群**
+- `"model": "kimi-k2.6-fast"` → 自动切换为 **K2.6**
+- `"model": "kimi"` → 使用 **K2.6**
 
 ## API Key 认证
 
@@ -188,7 +189,7 @@ PROXY_API_KEY=sk-alice-key,sk-bob-key,sk-carol-key
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-your-secret-key" \
-  -d '{"model":"kimi-k2.6-think","messages":[{"role":"user","content":"你好"}]}'
+  -d '{"model":"kimi-k3-max","messages":[{"role":"user","content":"你好"}]}'
 ```
 
 Token 错误或缺失时返回：
@@ -205,7 +206,7 @@ curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-your-secret-key" \
   -d '{
-    "model": "kimi-k2.6-think",
+    "model": "kimi-k3-max",
     "messages": [{"role": "user", "content": "你好"}]
   }'
 ```
@@ -217,7 +218,7 @@ curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-your-secret-key" \
   -d '{
-    "model": "kimi-k2.6-think",
+    "model": "kimi-k3-max",
     "messages": [{"role": "user", "content": "你好"}],
     "stream": true
   }'
@@ -278,9 +279,9 @@ curl http://localhost:8080/v1/chat/completions/upload \
 - `path`：通过 `http://localhost:8080/media/<filename>` 可直接访问
 - 若自动下载失败，会话会被**自动保留**，用户可在浏览器中手动下载
 
-### 思考模型推理内容
+### 推理内容分离
 
-当使用 Kimi 思考模型（如 `kimi-k2.6-think`、`moonshot-k2.6-think`）时，服务会自动将页面中的推理过程和正式回答分离：
+当使用 Kimi K3 系列等会产生推理内容的模型（如 `kimi-k3-max`、`moonshot-k3-max`）时，服务会自动将页面中的推理过程和正式回答分离：
 
 ```json
 {
@@ -296,7 +297,7 @@ curl http://localhost:8080/v1/chat/completions/upload \
 
 - `content`：模型最终输出结果（对应页面 `class="markdown-container"`）
 - `reasoning_content`：模型推理过程（对应页面 `class="container-block"`）
-- 非思考模型返回的 `reasoning_content` 为空字符串
+- 不产生推理内容的模型返回的 `reasoning_content` 为空字符串
 
 ### Python OpenAI SDK
 

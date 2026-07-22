@@ -12,20 +12,18 @@ router = APIRouter()
 _ALL_MODELS = [
     {"id": "gemini-pro-via-proxy", "object": "model", "created": 1700000000, "owned_by": "webui-llm-proxy"},
     {"id": "kimi-via-proxy", "object": "model", "created": 1700000001, "owned_by": "webui-llm-proxy"},
-    {"id": "kimi-k2.6-fast", "object": "model", "created": 1700000002, "owned_by": "webui-llm-proxy"},
-    {"id": "kimi-k2.6-think", "object": "model", "created": 1700000003, "owned_by": "webui-llm-proxy"},
-    {"id": "kimi-k2.6-agent", "object": "model", "created": 1700000004, "owned_by": "webui-llm-proxy"},
-    {"id": "kimi-k2.6-agent-cluster", "object": "model", "created": 1700000005, "owned_by": "webui-llm-proxy"},
+    {"id": "kimi-k3-max", "object": "model", "created": 1700000002, "owned_by": "webui-llm-proxy"},
+    {"id": "kimi-k3-cluster-max", "object": "model", "created": 1700000003, "owned_by": "webui-llm-proxy"},
+    {"id": "kimi-k2.6-fast", "object": "model", "created": 1700000004, "owned_by": "webui-llm-proxy"},
 ]
 
 # 模型 ID 到前缀映射
 _MODEL_PREFIX_MAP = {
     "gemini-pro-via-proxy": "gemini",
     "kimi-via-proxy": "kimi",
+    "kimi-k3-max": "kimi",
+    "kimi-k3-cluster-max": "kimi",
     "kimi-k2.6-fast": "kimi",
-    "kimi-k2.6-think": "kimi",
-    "kimi-k2.6-agent": "kimi",
-    "kimi-k2.6-agent-cluster": "kimi",
 }
 
 

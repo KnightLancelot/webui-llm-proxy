@@ -586,10 +586,13 @@ class KimiClient(BaseLLMClient):
     # ==================== Text extraction ====================
 
     def _is_think_model(self) -> bool:
-        """判断当前是否为思考模型"""
-        return bool(
-            self.model_name
-            and ("think" in self.model_name.lower() or "思考" in self.model_name)
+        """判断当前是否为（可能）产生推理内容的模型（K3 / Max / 旧版思考模型）"""
+        if not self.model_name:
+            return False
+        lower = self.model_name.lower()
+        return (
+            any(k in lower for k in ("think", "k3", "max"))
+            or "思考" in self.model_name
         )
 
     async def _extract_response_text(self, skip_count: int = 0) -> str:
@@ -1463,37 +1466,50 @@ class KimiClient(BaseLLMClient):
 
     async def _select_model(self, model_name: str = None) -> None:
         """
-        在 Kimi 页面选择模型模式（K2.6 快速 / 思考 / Agent / Agent 集群）
+        在 Kimi 页面选择模型模式（K3 / K3 集群 / K2.6）
         通过 JS 动态探测下拉菜单坐标，使用 Playwright mouse.click() 点击
+
+        target_spec 结构: {"includes": [...], "excludes": [...]}
+        元素文本包含任一 includes 关键词且不包含任何 excludes 关键词时视为匹配。
         """
         self.model_name = model_name or ""
         if not model_name:
             return
 
-        # 标准化 model_name，提取目标关键词
+        # 标准化 model_name，映射到目标选项
         model_lower = model_name.lower()
-        target_keywords = []
-        if "agent-cluster" in model_lower or "集群" in model_lower:
-            target_keywords = ["Agent 集群", "agent-cluster", "集群"]
-        elif "agent" in model_lower:
-            target_keywords = ["Agent", "agent"]
-        elif "think" in model_lower or "思考" in model_lower:
-            target_keywords = ["思考", "think"]
-        elif "fast" in model_lower or "快速" in model_lower:
-            target_keywords = ["快速", "fast"]
-        elif "kimi" in model_lower:
-            # 默认切换到 K2.6 快速
-            target_keywords = ["快速", "fast"]
+        if "cluster" in model_lower or "集群" in model_lower:
+            target_spec = {"includes": ["集群"], "excludes": []}
+            target_label = "K3 集群"
+        elif "think" in model_lower or "思考" in model_lower or "agent" in model_lower:
+            # 旧版 思考 / Agent 模式已下线，回退到 K3
+            logger.warning(f"Kimi 思考/Agent 模式已下线，'{model_name}' 回退为 K3")
+            target_spec = {"includes": ["K3"], "excludes": ["集群"]}
+            target_label = "K3"
+        elif "fast" in model_lower or "快速" in model_lower or "k2.6" in model_lower or "k2" in model_lower:
+            target_spec = {"includes": ["K2.6"], "excludes": []}
+            target_label = "K2.6"
+        elif "max" in model_lower or "k3" in model_lower:
+            target_spec = {"includes": ["K3"], "excludes": ["集群"]}
+            target_label = "K3"
+        elif "kimi" in model_lower or "moonshot" in model_lower:
+            # 默认切换到 K2.6
+            target_spec = {"includes": ["K2.6"], "excludes": []}
+            target_label = "K2.6"
         else:
             return  # 无法识别，不操作
 
-        logger.info(f"准备选择 Kimi 模型，目标关键词: {target_keywords}")
+        logger.info(f"准备选择 Kimi 模型: {target_label} (spec={target_spec})")
 
         page = self._get_page()
         try:
             # 步骤1: 检查当前是否已经是目标模型（只检查输入框右上方的模型选择按钮）
-            check_result = await page.evaluate(
-                """(keywords) => {
+            check_current_js = """(spec) => {
+                    const matchesSpec = (text) => {
+                        const inc = spec.includes.some(kw => text.includes(kw));
+                        const exc = spec.excludes.some(kw => text.includes(kw));
+                        return inc && !exc;
+                    };
                     const inputBox = document.querySelector('textarea, div[contenteditable="true"]');
                     const inputRect = inputBox ? inputBox.getBoundingClientRect() : null;
                     const viewportW = window.innerWidth;
@@ -1513,18 +1529,14 @@ class KimiClient(BaseLLMClient):
                             if (!aboveInput || !rightSide || !smallSize) continue;
                         }
 
-                        if (text.includes('K2.6') || text.includes('k2.6')) {
-                            for (const kw of keywords) {
-                                if (text.includes(kw)) {
-                                    return {already: true, text: text};
-                                }
-                            }
+                        // 元素自身必须是短文本（模型选择按钮而非容器）
+                        if (text.length < 30 && matchesSpec(text)) {
+                            return {already: true, text: text};
                         }
                     }
                     return {already: false};
-                }""",
-                target_keywords,
-            )
+                }"""
+            check_result = await page.evaluate(check_current_js, target_spec)
 
             if check_result.get("already"):
                 logger.info(f"当前已是目标模型: {check_result.get('text')}")
@@ -1552,11 +1564,11 @@ class KimiClient(BaseLLMClient):
                             // 关键过滤：排除侧边栏等视口外元素（x < 0 或 x > viewportW）
                             if (rect.x < 0 || rect.x > viewportW || rect.y < 0 || rect.y > viewportH) continue;
 
-                            // 模型选择器特征：包含 K2.6 或当前模型名称
+                            // 模型选择器特征：包含当前模型名称（K3 / K2.6）
                             let score = 0;
                             let matched = false;
 
-                            if (text.includes('K2.6') || text.includes('k2.6') || text.includes('快速') || text.includes('思考') || text.includes('Agent')) {
+                            if (text.includes('K3') || text.includes('K2.6')) {
                                 if (text.length < 80) matched = true;
                             }
 
@@ -1581,8 +1593,8 @@ class KimiClient(BaseLLMClient):
                             if (rect.y > viewportH * 0.5) score += 5;
                             // 尺寸合适
                             if (rect.width > 60 && rect.width < 300 && rect.height > 15 && rect.height < 80) score += 5;
-                            // 包含 K2.6 精确匹配加分
-                            if (text.includes('K2.6') || text.includes('k2.6')) score += 10;
+                            // 包含 K3 / K2.6 精确匹配加分
+                            if (text.includes('K3') || text.includes('K2.6')) score += 10;
                             // 父元素可点击加分
                             let p = el.parentElement;
                             for (let i = 0; i < 4 && p; i++) {
@@ -1621,7 +1633,7 @@ class KimiClient(BaseLLMClient):
                             const text = (el.textContent || '').trim();
                             const rect = el.getBoundingClientRect();
                             if (rect.width > 0 && rect.height > 0 && rect.x >= 0 && rect.x <= viewportW && rect.y >= 0 && rect.y <= viewportH) {
-                                if ((text.includes('K2.6') || text.includes('k2.6') || text.includes('快速') || text.includes('思考') || text.includes('Agent')) && text.length < 100) {
+                                if ((text.includes('K3') || text.includes('K2.6')) && text.length < 100) {
                                     if (text.includes('输入') && text.includes('技能')) continue;
                                     matches.push({text: text, x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height)});
                                 }
@@ -1644,44 +1656,61 @@ class KimiClient(BaseLLMClient):
             await asyncio.sleep(1.2)  # 等待下拉菜单展开
 
             # 步骤3: 获取目标选项的坐标并点击
+            # 下拉菜单在选择按钮附近展开（可能向上或向下），因此按距按钮的距离评分，
+            # 并排除视口外元素（侧边栏/隐藏面板中的同名文案曾导致误点）
             option_coord = await page.evaluate(
-                """(keywords) => {
+                """(args) => {
+                    const spec = args.spec;
+                    const btn = args.btn;
+                    const matchesSpec = (text) => {
+                        const inc = spec.includes.some(kw => text.includes(kw));
+                        const exc = spec.excludes.some(kw => text.includes(kw));
+                        return inc && !exc;
+                    };
                     const all = document.querySelectorAll('*');
                     let best = null;
                     let bestScore = -1;
                     const viewportH = window.innerHeight;
+                    const viewportW = window.innerWidth;
+                    const btnCx = btn.x + btn.w / 2;
+                    const btnCy = btn.y + btn.h / 2;
 
                     for (const el of all) {
                         const text = (el.textContent || '').trim();
-                        for (const kw of keywords) {
-                            if (text.includes(kw)) {
-                                const rect = el.getBoundingClientRect();
-                                if (rect.width === 0 || rect.height === 0) continue;
+                        if (!text || !matchesSpec(text)) continue;
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) continue;
+                        // 关键过滤：排除视口外元素
+                        if (rect.x < 0 || rect.x > viewportW || rect.y < 0 || rect.y > viewportH) continue;
 
-                                // 选项特征：位于页面中下部，宽度适中
-                                let score = 0;
-                                if (rect.y > viewportH * 0.5) score += 5;
-                                if (rect.width > 100 && rect.width < 400) score += 5;
-                                if (rect.height > 30 && rect.height < 120) score += 5;
-                                // 包含 K2.6 加分
-                                if (text.includes('K2.6') || text.includes('k2.6')) score += 10;
-                                // 越靠近页面底部（输入框区域）分数越高
-                                if (rect.y > viewportH * 0.6) score += 5;
+                        let score = 0;
+                        // 尺寸合适（单个选项）
+                        if (rect.width > 60 && rect.width < 400) score += 5;
+                        if (rect.height > 15 && rect.height < 120) score += 5;
+                        // 包含 K3 / K2.6 加分
+                        if (text.includes('K3') || text.includes('K2.6')) score += 10;
+                        // 短文本更像单个选项（span.name），长文本多为容器
+                        if (text.length < 30) score += 8;
+                        // 距模型选择按钮越近分数越高
+                        const cx = rect.x + rect.width / 2;
+                        const cy = rect.y + rect.height / 2;
+                        const dist = Math.hypot(cx - btnCx, cy - btnCy);
+                        if (dist < 150) score += 20;
+                        else if (dist < 300) score += 12;
+                        else if (dist < 500) score += 5;
 
-                                if (score > bestScore) {
-                                    bestScore = score;
-                                    best = {x: rect.x, y: rect.y, w: rect.width, h: rect.height, text: text, score: score};
-                                }
-                            }
+                        if (score > bestScore) {
+                            bestScore = score;
+                            best = {x: rect.x, y: rect.y, w: rect.width, h: rect.height, text: text, score: score, dist: Math.round(dist)};
                         }
                     }
                     return best ? {found: true, ...best} : {found: false};
                 }""",
-                target_keywords,
+                {"spec": target_spec, "btn": btn_coord},
             )
 
             if not option_coord.get("found"):
-                logger.warning(f"未找到目标模型选项坐标: {target_keywords}")
+                logger.warning(f"未找到目标模型选项坐标: {target_label} (spec={target_spec})")
                 # 尝试按 Escape 关闭菜单
                 try:
                     await page.keyboard.press("Escape")
@@ -1689,14 +1718,21 @@ class KimiClient(BaseLLMClient):
                     pass
                 return
 
-            logger.info(f"目标选项坐标: ({option_coord['x']:.0f}, {option_coord['y']:.0f}) 文字: {option_coord.get('text')} 分数: {option_coord.get('score')}")
+            logger.info(f"目标选项坐标: ({option_coord['x']:.0f}, {option_coord['y']:.0f}) 文字: {option_coord.get('text')} 分数: {option_coord.get('score')} 距按钮: {option_coord.get('dist')}px")
 
             await page.mouse.click(
                 option_coord["x"] + option_coord["w"] / 2,
                 option_coord["y"] + option_coord["h"] / 2,
             )
-            logger.info(f"已选择 Kimi 模型: {option_coord.get('text')}")
-            await asyncio.sleep(0.5)
+            logger.info(f"已点击目标选项: {option_coord.get('text')}")
+            await asyncio.sleep(0.8)
+
+            # 步骤4: 回读验证切换是否生效，避免静默失败
+            verify_result = await page.evaluate(check_current_js, target_spec)
+            if verify_result.get("already"):
+                logger.info(f"已选择 Kimi 模型: {verify_result.get('text')}")
+            else:
+                logger.warning(f"模型切换可能未生效，目标: {target_label}，请检查页面状态")
 
         except Exception as e:
             logger.warning(f"选择 Kimi 模型时出错: {e}")
