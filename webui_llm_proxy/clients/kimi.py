@@ -1466,7 +1466,7 @@ class KimiClient(BaseLLMClient):
 
     async def _select_model(self, model_name: str = None) -> None:
         """
-        在 Kimi 页面选择模型模式（K3 / K3 集群 / K2.6）
+        在 Kimi 页面选择模型模式（K3 / K3 集群 / 快速）
         通过 JS 动态探测下拉菜单坐标，使用 Playwright mouse.click() 点击
 
         target_spec 结构: {"includes": [...], "excludes": [...]}
@@ -1487,15 +1487,16 @@ class KimiClient(BaseLLMClient):
             target_spec = {"includes": ["K3"], "excludes": ["集群"]}
             target_label = "K3"
         elif "fast" in model_lower or "快速" in model_lower or "k2.6" in model_lower or "k2" in model_lower:
-            target_spec = {"includes": ["K2.6"], "excludes": []}
-            target_label = "K2.6"
+            # 页面选项原 K2.6 现已更名为 快速，保留 K2.6 作为过渡期回退匹配
+            target_spec = {"includes": ["快速", "K2.6"], "excludes": []}
+            target_label = "快速"
         elif "max" in model_lower or "k3" in model_lower:
             target_spec = {"includes": ["K3"], "excludes": ["集群"]}
             target_label = "K3"
         elif "kimi" in model_lower or "moonshot" in model_lower:
-            # 默认切换到 K2.6
-            target_spec = {"includes": ["K2.6"], "excludes": []}
-            target_label = "K2.6"
+            # 默认切换到 快速
+            target_spec = {"includes": ["快速", "K2.6"], "excludes": []}
+            target_label = "快速"
         else:
             return  # 无法识别，不操作
 
@@ -1564,11 +1565,11 @@ class KimiClient(BaseLLMClient):
                             // 关键过滤：排除侧边栏等视口外元素（x < 0 或 x > viewportW）
                             if (rect.x < 0 || rect.x > viewportW || rect.y < 0 || rect.y > viewportH) continue;
 
-                            // 模型选择器特征：包含当前模型名称（K3 / K2.6）
+                            // 模型选择器特征：包含当前模型名称（K3 / K2.6 / 快速）
                             let score = 0;
                             let matched = false;
 
-                            if (text.includes('K3') || text.includes('K2.6')) {
+                            if (text.includes('K3') || text.includes('K2.6') || text.includes('快速')) {
                                 if (text.length < 80) matched = true;
                             }
 
@@ -1593,8 +1594,8 @@ class KimiClient(BaseLLMClient):
                             if (rect.y > viewportH * 0.5) score += 5;
                             // 尺寸合适
                             if (rect.width > 60 && rect.width < 300 && rect.height > 15 && rect.height < 80) score += 5;
-                            // 包含 K3 / K2.6 精确匹配加分
-                            if (text.includes('K3') || text.includes('K2.6')) score += 10;
+                            // 包含 K3 / K2.6 / 快速 精确匹配加分
+                            if (text.includes('K3') || text.includes('K2.6') || text.includes('快速')) score += 10;
                             // 父元素可点击加分
                             let p = el.parentElement;
                             for (let i = 0; i < 4 && p; i++) {
@@ -1633,7 +1634,7 @@ class KimiClient(BaseLLMClient):
                             const text = (el.textContent || '').trim();
                             const rect = el.getBoundingClientRect();
                             if (rect.width > 0 && rect.height > 0 && rect.x >= 0 && rect.x <= viewportW && rect.y >= 0 && rect.y <= viewportH) {
-                                if ((text.includes('K3') || text.includes('K2.6')) && text.length < 100) {
+                                if ((text.includes('K3') || text.includes('K2.6') || text.includes('快速')) && text.length < 100) {
                                     if (text.includes('输入') && text.includes('技能')) continue;
                                     matches.push({text: text, x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height)});
                                 }
@@ -1687,8 +1688,8 @@ class KimiClient(BaseLLMClient):
                         // 尺寸合适（单个选项）
                         if (rect.width > 60 && rect.width < 400) score += 5;
                         if (rect.height > 15 && rect.height < 120) score += 5;
-                        // 包含 K3 / K2.6 加分
-                        if (text.includes('K3') || text.includes('K2.6')) score += 10;
+                        // 包含 K3 / K2.6 / 快速 加分
+                        if (text.includes('K3') || text.includes('K2.6') || text.includes('快速')) score += 10;
                         // 短文本更像单个选项（span.name），长文本多为容器
                         if (text.length < 30) score += 8;
                         // 距模型选择按钮越近分数越高
