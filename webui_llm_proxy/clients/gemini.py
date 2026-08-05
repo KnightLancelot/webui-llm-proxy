@@ -195,25 +195,59 @@ class GeminiClient(BaseLLMClient):
     # ==================== New chat ====================
 
     async def new_chat(self) -> None:
-        logger.info("Starting new chat (Gemini)...")
-        page = self._get_page()
-        selectors = [
-            'button:has-text("New chat")',
-            'a:has-text("New chat")',
-            '[aria-label*="New chat"]',
-            '[data-testid="new-chat-button"]',
-        ]
-        for sel in selectors:
-            try:
-                btn = page.locator(sel).first
-                if await btn.is_visible(timeout=3000):
-                    await btn.click()
-                    logger.info("New chat button clicked")
-                    await asyncio.sleep(3)
+        """Gemini: 每次调用前回到首页，确保开启新会话。"""
+        logger.info("Preparing chat (Gemini)...")
+        try:
+            page = self._get_page()
+            current = page.url
+            if settings.gemini.chat_url in current:
+                logger.info(f"Already on Gemini page: {current}")
+                # 如果当前 URL 包含具体 chat id，仍然需要刷新首页以开启新会话
+                if "/app/" in current and current != settings.gemini.chat_url:
+                    logger.info("Current URL contains chat id, navigating to home for fresh session")
+                else:
                     return
-            except Exception:
-                continue
-        logger.warning("New chat button not found, skipping")
+            await page.goto(settings.gemini.chat_url, wait_until="domcontentloaded")
+            await asyncio.sleep(self._get_page_load_wait())
+            logger.info(f"Navigated to Gemini home: {settings.gemini.chat_url}")
+        except Exception as e:
+            logger.warning(f"Gemini navigation to home failed: {e}, trying new chat button")
+            await self._click_new_chat_button()
+
+    async def _click_new_chat_button(self) -> None:
+        """点击 New chat 按钮作为回退方案"""
+        try:
+            page = self._get_page()
+            selectors = [
+                'button:has-text("New chat")',
+                'a:has-text("New chat")',
+                '[aria-label*="New chat"]',
+                '[data-testid="new-chat-button"]',
+            ]
+            for sel in selectors:
+                try:
+                    btn = page.locator(sel).first
+                    if await btn.is_visible(timeout=3000):
+                        await btn.click()
+                        logger.info("New chat button clicked")
+                        await asyncio.sleep(3)
+                        return
+                except Exception:
+                    continue
+            logger.warning("New chat button not found, skipping")
+        except Exception as e:
+            logger.warning(f"Click new chat button failed: {e}")
+
+    async def _cleanup_after_send(self) -> None:
+        """每次调用后回到 Gemini 首页，确保下一次调用是新会话。"""
+        logger.info("Cleaning up Gemini session...")
+        try:
+            page = self._get_page()
+            await page.goto(settings.gemini.chat_url, wait_until="domcontentloaded")
+            await asyncio.sleep(self._get_page_load_wait())
+            logger.info("Gemini returned to home after chat")
+        except Exception as e:
+            logger.warning(f"Gemini cleanup failed: {e}")
 
     # ==================== Diff ====================
 

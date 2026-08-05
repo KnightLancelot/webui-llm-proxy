@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from webui_llm_proxy.adapters.models import ChatRequest
-from webui_llm_proxy.adapters.openai import OpenAIResponseAdapter, download_images
+from webui_llm_proxy.adapters.openai import OpenAIResponseAdapter, ToolCallParser, download_images
 from webui_llm_proxy.api.dependencies import get_pool, parse_chat_request, verify_api_key
 from webui_llm_proxy.api.server import get_event_bus, get_memory
 from webui_llm_proxy.clients.base import BaseLLMClient
@@ -82,6 +82,10 @@ async def chat_completions(
         "messages": chat_request.messages,
         "stream": stream_mode,
     }
+    if chat_request.tools:
+        request_body_for_log["tools"] = chat_request.tools
+    if chat_request.tool_choice:
+        request_body_for_log["tool_choice"] = chat_request.tool_choice
 
     adapter = OpenAIResponseAdapter()
 
@@ -95,26 +99,18 @@ async def chat_completions(
                     file_paths=file_paths if file_paths else None,
                     model_name=model,
                 )
-                stream = adapter.stream_response(
-                    msg_stream,
-                    model=model,
-                    custom_content={"media_files": client.last_media_files, "reasoning_content": client.last_reasoning_content} if client.last_media_files or client.last_reasoning_content else None,
-                )
+                custom_content = {"media_files": client.last_media_files, "reasoning_content": client.last_reasoning_content} if client.last_media_files or client.last_reasoning_content else None
 
                 try:
-                    async for chunk in stream:
-                        yield chunk
-                        # 累积完整响应
-                        try:
-                            data = json.loads(chunk.replace("data: ", "").strip())
-                            delta = data.get("choices", [{}])[0].get("delta", {})
-                            if "content" in delta:
-                                full_response += delta["content"]
-                        except Exception:
-                            pass
+                    yield adapter.build_role_chunk(model)
+                    async for chunk in msg_stream:
+                        if chunk:
+                            full_response += chunk
+                            yield adapter.build_stream_chunk(chunk, model)
+
+                    tool_calls = ToolCallParser.parse(full_response)
+                    yield adapter.build_finish_chunk(model, custom_content=custom_content, tool_calls=tool_calls)
                 finally:
-                    # 确保内部 generator 被关闭
-                    await stream.aclose()
                     await msg_stream.aclose()
 
                     if full_response:
@@ -127,6 +123,8 @@ async def chat_completions(
 
                     # 流结束后归还客户端
                     await _release()
+
+                yield adapter.build_stream_end()
 
             return StreamingResponse(
                 event_generator(),
@@ -157,11 +155,13 @@ async def chat_completions(
                 for m in client.last_media_files
             ]
 
+            tool_calls = ToolCallParser.parse(response_text)
             response = ChatResponse(
                 content=response_text,
                 model=model,
                 media_files=media_files,
                 reasoning_content=client.last_reasoning_content,
+                tool_calls=tool_calls,
             )
 
             memory.add_message("assistant", response_text)

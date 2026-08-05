@@ -19,6 +19,8 @@ class ChatRequest:
     last_user_message: str = ""
     image_urls: list[str] = field(default_factory=list)
     has_images: bool = False
+    tools: list[dict] = field(default_factory=list)
+    tool_choice: Optional[str] = None
 
 
 @dataclass
@@ -38,6 +40,7 @@ class ChatResponse:
     model: str
     media_files: list[MediaFile] = field(default_factory=list)
     reasoning_content: str = ""
+    tool_calls: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         result = {

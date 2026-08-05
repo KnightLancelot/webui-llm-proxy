@@ -586,19 +586,16 @@ class KimiClient(BaseLLMClient):
     # ==================== Text extraction ====================
 
     def _is_think_model(self) -> bool:
-        """判断当前是否为（可能）产生推理内容的模型（K3 / Max / 旧版思考模型）"""
-        if not self.model_name:
-            return False
-        lower = self.model_name.lower()
-        return (
-            any(k in lower for k in ("think", "k3", "max"))
-            or "思考" in self.model_name
-        )
+        """Kimi 各模型（快速 / K3 / K3 集群）均可能展示推理过程，统一走推理分离提取路径。
+
+        页面无推理块时会优雅回退（正文走通用选择器），reasoning_content 返回空字符串。
+        """
+        return bool(self.model_name)
 
     async def _extract_response_text(self, skip_count: int = 0) -> str:
         page = self._get_page()
 
-        # ===== 思考模型：只返回正式回答（markdown-container）=====
+        # ===== 推理分离：只返回正式回答（markdown-container）=====
         if self._is_think_model():
             try:
                 boxes = await page.locator(".segment-content-box").all()
@@ -634,7 +631,7 @@ class KimiClient(BaseLLMClient):
         return ""
 
     async def _extract_reasoning_text(self) -> str:
-        """提取思考模型的推理内容（container-block）"""
+        """提取推理内容（container-block），页面无推理块时返回空字符串"""
         if not self._is_think_model():
             return ""
 

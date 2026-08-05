@@ -14,7 +14,7 @@
 | **流式/非流式输出** | `stream=true/false` 自由切换，流式返回 SSE 事件流 |
 | **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`），包括代码文件（`.py` `.js` `.ts` `.java` `.c` `.cpp` 等） |
 | **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择 K3 / K3 集群 / 快速 |
-| **推理内容分离** | 使用 K3 系列等模型时，推理内容放入 `reasoning_content`，正式回答放入 `content` |
+| **推理内容分离** | 使用 Kimi 模型（快速 / K3 / K3 集群）时，推理内容放入 `reasoning_content`，正式回答放入 `content` |
 | **Sandbox 文件自动下载** | Kimi 生成的 Excel/Word/PPT/CSV 等 sandbox 文件，自动下载并返回可访问 URL |
 | **会话保留策略** | 检测到未下载文件时自动保留会话，方便用户手动下载 |
 | **API Key 认证** | Bearer Token 校验，支持逗号分隔多个 Key |
@@ -281,7 +281,7 @@ curl http://localhost:8080/v1/chat/completions/upload \
 
 ### 推理内容分离
 
-当使用 Kimi K3 系列等会产生推理内容的模型（如 `kimi-k3-max`、`moonshot-k3-max`）时，服务会自动将页面中的推理过程和正式回答分离：
+当使用 Kimi 模型（快速 / K3 / K3 集群，如 `kimi-k2.6-fast`、`kimi-k3-max`）时，服务会自动将页面中的推理过程和正式回答分离：
 
 ```json
 {
@@ -298,6 +298,76 @@ curl http://localhost:8080/v1/chat/completions/upload \
 - `content`：模型最终输出结果（对应页面 `class="markdown-container"`）
 - `reasoning_content`：模型推理过程（对应页面 `class="container-block"`）
 - 不产生推理内容的模型返回的 `reasoning_content` 为空字符串
+
+### Function Calling（工具调用）
+
+> 当前通过 **Prompt 工程** 模拟 OpenAI 的 `tools`/`tool_calls` 协议，Web UI 本身不暴露原生工具接口。
+> 模型需要在回复中严格按指令输出 JSON 代码块。
+
+请求示例：
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-secret-key" \
+  -d '{
+    "model": "kimi-k3-max",
+    "messages": [
+      {"role": "system", "content": "你是一个 helpful assistant。"},
+      {"role": "user", "content": "北京今天天气怎么样？"}
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "获取指定城市的当前天气",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {"type": "string", "description": "城市名"}
+            },
+            "required": ["location"]
+          }
+        }
+      }
+    ]
+  }'
+```
+
+当模型输出如下格式时，服务会解析为 `tool_calls`：
+
+```json
+{"tool_calls": [{"function": {"name": "get_weather", "arguments": {"location": "北京"}}}]}
+```
+
+返回示例：
+
+```json
+{
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "id": "call_xxx",
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "arguments": "{\"location\": \"北京\"}"
+        }
+      }]
+    },
+    "finish_reason": "tool_calls"
+  }]
+}
+```
+
+多轮工具调用：把 `role: "tool"` 消息（包含 `tool_call_id` 和 `name`）放回 `messages`，服务会自动把工具结果和历史 tool_calls 渲染进 prompt：
+
+```json
+{"role": "tool", "tool_call_id": "call_xxx", "name": "get_weather", "content": "晴，25°C"}
+```
 
 ### Python OpenAI SDK
 
