@@ -121,7 +121,7 @@ class OpenAISettings(BaseSettings):
     port: int = Field(default=8080, description="服务监听端口")
     api_key: str = Field(default="", description="API Key，支持逗号分隔多个 key（为空时不校验）")
     model_name: str = Field(default="gemini-pro-via-proxy", description="对外暴露的默认模型名称")
-    max_context_length: int = Field(default=8000, description="单次请求最大上下文长度")
+    max_context_length: int = Field(default=128000, description="单次请求最大上下文长度")
 
     @property
     def api_keys(self) -> set[str]:
