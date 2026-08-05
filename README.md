@@ -407,6 +407,7 @@ print(response.choices[0].message.content)
 | `PROXY_GEMINI_CHAT_URL` | `https://gemini.google.com/app` | Gemini 页面 |
 | `PROXY_KIMI_CHAT_URL` | `https://kimi.moonshot.cn` | Kimi 页面 |
 | `PROXY_MEDIA_DIR` | `./data/downloads` | 自动下载文件的保存目录 |
+| `PROXY_MAX_CONTEXT_LENGTH` | `128000` | 单次请求最大上下文长度 |
 
 ### 并发配置（浏览器实例池）
 
