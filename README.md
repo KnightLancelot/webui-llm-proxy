@@ -163,7 +163,15 @@ Kimi 客户端会根据 `model` 名称中的关键词自动在网页上切换对
 - `"model": "kimi-k2.6-fast"` → 自动切换为 **快速**
 - `"model": "kimi"` → 使用 **快速**
 
-## API Key 认证
+### Gemini 长提示词自动转文件
+
+Gemini 网页输入框对超长文本粘贴支持有限。当调用 `model=gemini-xxx` 且本次请求的提示词（合并 system + user 后的最终文本）超过阈值时，服务会自动将提示词写入 `.txt` 文件并上传，输入框只发送简短引导语。
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `PROXY_GEMINI_LONG_MESSAGE_THRESHOLD` | `30000` | 字符数阈值，超过则转文件上传；设为 `0` 可关闭 |
+
+临时文件保存到 `PROXY_UPLOAD_TEMP_DIR`（默认 `./data/uploads`），文件名形如 `gemini_prompt_<uuid>.txt`。
 
 服务支持 **Bearer Token** 认证，所有接口（`/v1/chat/completions`、`/v1/chat/completions/upload`、`/models` 等）默认受保护。
 
@@ -405,6 +413,7 @@ print(response.choices[0].message.content)
 | `PROXY_USE_LOCAL_CHROME` | `true` | 使用本地 Chrome |
 | `PROXY_CHROME_EXECUTABLE` | `C:\Program Files\Google\Chrome\Application\chrome.exe` | Chrome 路径 |
 | `PROXY_GEMINI_CHAT_URL` | `https://gemini.google.com/app` | Gemini 页面 |
+| `PROXY_GEMINI_LONG_MESSAGE_THRESHOLD` | `30000` | Gemini 提示词超过该字符数时自动写入 txt 文件上传（`0` 关闭） |
 | `PROXY_KIMI_CHAT_URL` | `https://kimi.moonshot.cn` | Kimi 页面 |
 | `PROXY_MEDIA_DIR` | `./data/downloads` | 自动下载文件的保存目录 |
 | `PROXY_MAX_CONTEXT_LENGTH` | `128000` | 单次请求最大上下文长度 |

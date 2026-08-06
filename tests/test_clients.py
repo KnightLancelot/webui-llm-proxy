@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+
 import pytest
 
 from webui_llm_proxy.clients.factory import LLMClientFactory
@@ -56,6 +59,30 @@ class TestGeminiClient:
     def test_is_ready_before_start(self):
         client = GeminiClient()
         assert client.is_ready is False
+
+    def test_prepare_long_message_short_prompt(self):
+        client = GeminiClient()
+        msg, paths = asyncio.run(client._prepare_long_message("short", ["/a.txt"]))
+        assert msg == "short"
+        assert paths == ["/a.txt"]
+
+    def test_prepare_long_message_long_prompt(self, tmp_path, monkeypatch):
+        from webui_llm_proxy.config import settings
+        monkeypatch.setattr(settings.gemini, "long_message_threshold", 10)
+        uploads = tmp_path / "uploads"
+        monkeypatch.setattr(settings.upload, "temp_dir", str(uploads))
+
+        client = GeminiClient()
+        long_text = "a" * 50
+        msg, paths = asyncio.run(client._prepare_long_message(long_text, ["/a.txt"]))
+        assert len(paths) == 2
+        assert paths[0] == "/a.txt"
+        prompt_path = paths[1]
+        assert prompt_path.endswith(".txt")
+        assert os.path.exists(prompt_path)
+        with open(prompt_path, encoding="utf-8") as f:
+            assert f.read() == long_text
+        assert "附件" in msg or "文件" in msg
 
 
 class TestKimiClient:

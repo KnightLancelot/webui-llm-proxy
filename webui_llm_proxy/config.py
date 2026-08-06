@@ -47,6 +47,7 @@ class GeminiSettings(BaseSettings):
     response_start_timeout: int = Field(default=60, description="等待回复开始的最长时间（秒）")
     stream_idle_timeout: int = Field(default=30, description="流式输出空闲超时（秒）")
     poll_interval_ms: int = Field(default=200, description="DOM 轮询间隔（毫秒）")
+    long_message_threshold: int = Field(default=30000, description="Gemini 提示词超过该字符数时自动写入 txt 文件上传")
 
     # DOM 选择器
     input_selector: str = Field(default='div[role="textbox"]', description="输入框选择器")

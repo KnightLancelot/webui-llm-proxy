@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
 from typing import AsyncGenerator, Callable, Optional
 
 from webui_llm_proxy.browser.controller import BrowserController
@@ -54,6 +55,64 @@ class GeminiClient(BaseLLMClient):
 
     def _get_poll_interval(self) -> float:
         return settings.gemini.poll_interval_ms / 1000.0
+
+    # ==================== Long message handling ====================
+
+    async def _prepare_long_message(
+        self,
+        message: str,
+        file_paths: Optional[list[str]] = None,
+    ) -> tuple[str, list[str]]:
+        """
+        Gemini 对超长输入框粘贴支持较差：当 prompt 超过阈值时，
+        将其写入 .txt 文件并上传，输入框只保留简短引导语。
+        """
+        threshold = settings.gemini.long_message_threshold
+        if threshold <= 0 or len(message) <= threshold:
+            return message, list(file_paths or [])
+
+        temp_dir = settings.upload.temp_dir or "./data/uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        filename = f"gemini_prompt_{uuid.uuid4().hex[:16]}.txt"
+        filepath = os.path.join(temp_dir, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(message)
+        logger.info(
+            f"Gemini message too long ({len(message)} chars > {threshold}), "
+            f"saved prompt to {filepath} and will upload it."
+        )
+
+        all_paths = list(file_paths or [])
+        all_paths.append(filepath)
+        short_message = (
+            "我已将完整指令上传到附件的文本文件中，请阅读该文件并按其中的要求执行。"
+        )
+        return short_message, all_paths
+
+    async def send_message(
+        self,
+        message: str,
+        file_paths: Optional[list[str]] = None,
+        model_name: Optional[str] = None,
+    ) -> str:
+        message, file_paths = await self._prepare_long_message(message, file_paths)
+        return await super().send_message(message, file_paths=file_paths, model_name=model_name)
+
+    async def send_message_stream(
+        self,
+        message: str,
+        file_paths: Optional[list[str]] = None,
+        model_name: Optional[str] = None,
+        on_chunk: Optional[Callable[[str], None]] = None,
+    ) -> AsyncGenerator[str, None]:
+        message, file_paths = await self._prepare_long_message(message, file_paths)
+        async for chunk in super().send_message_stream(
+            message,
+            file_paths=file_paths,
+            model_name=model_name,
+            on_chunk=on_chunk,
+        ):
+            yield chunk
 
     # ==================== Input & Send ====================
 
