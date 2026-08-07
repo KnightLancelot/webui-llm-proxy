@@ -15,6 +15,8 @@
 | **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`），包括代码文件（`.py` `.js` `.ts` `.java` `.c` `.cpp` 等） |
 | **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择 K3 / K3 集群 / 快速 |
 | **推理内容分离** | 使用 Kimi 模型（快速 / K3 / K3 集群）时，推理内容放入 `reasoning_content`，正式回答放入 `content` |
+| **Gemini 响应前缀清理** | 自动去除 Gemini 回复中的 "Gemini 说" / "Gemini says" 等 UI 前缀，只返回实际回答内容 |
+| **Gemini 会话自动清理** | 每次请求结束后自动删除当前 Gemini 会话，避免会话堆积；可通过 `--keep-chat` 或 `PROXY_KEEP_CHAT=true` 保留 |
 | **Sandbox 文件自动下载** | Kimi 生成的 Excel/Word/PPT/CSV 等 sandbox 文件，自动下载并返回可访问 URL |
 | **会话保留策略** | 检测到未下载文件时自动保留会话，方便用户手动下载 |
 | **API Key 认证** | Bearer Token 校验，支持逗号分隔多个 Key |
@@ -152,16 +154,30 @@ Kimi 客户端会根据 `model` 名称中的关键词自动在网页上切换对
 
 | `model` 名称关键词 | 实际选择的 Kimi 模型 |
 |-------------------|---------------------|
-| 包含 `fast` / `快速` / `k2.6` | **快速** |
+| 包含 `fast` / `快速` / `k2.6`（如 `kimi-k2.6-fast`） | **快速**，并将思考强度设为 **标准** |
+| 同时包含 `think` / `思考` / `agent` + `fast` / `k2.6` / `快速`（如 `kimi-k2.6-think`） | **快速**，并将思考强度设为 **进阶** |
 | 包含 `max` / `k3` | **K3** |
 | 包含 `cluster` / `集群` | **K3 集群** |
-| 包含 `think` / `思考` / `agent`（旧模式已下线） | 回退为 **K3** |
+| 包含 `think` / `思考` / `agent`（无 `fast`/`k2.6` 时） | 旧模式已下线，回退为 **K3** |
 | 仅包含 `kimi` / `moonshot`（无上述关键词） | **快速**（默认） |
 
 示例：
 - `"model": "kimi-k3-cluster-max"` → 自动切换为 **K3 集群**
-- `"model": "kimi-k2.6-fast"` → 自动切换为 **快速**
-- `"model": "kimi"` → 使用 **快速**
+- `"model": "kimi-k2.6-fast"` → 自动切换为 **快速**，思考强度 **标准**
+- `"model": "kimi-k2.6-think"` → 自动切换为 **快速**，思考强度 **进阶**
+- `"model": "kimi"` → 使用 **快速**（默认）
+
+### Gemini 响应文本清理
+
+Gemini 网页版在每条回复前面会显示 `Gemini 说` / `Gemini says` 等 UI 标签。服务在提取回复文本时会自动剥离这些前缀，因此通过 API 返回的 `content` 中只包含模型的实际回答内容。
+
+### Gemini 会话自动清理
+
+每次请求结束后，代理会自动删除当前 Gemini 会话（通过点击侧边栏对应会话的菜单并确认删除），然后回到 Gemini 首页，确保下一次请求是全新的会话。如果你希望保留会话，可使用 `--keep-chat` 启动参数，或在 `.env` 中设置：
+
+```env
+PROXY_KEEP_CHAT=true
+```
 
 ### Gemini 长提示词自动转文件
 

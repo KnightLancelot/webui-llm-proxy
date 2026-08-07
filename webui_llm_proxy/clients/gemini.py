@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import uuid
 from typing import AsyncGenerator, Callable, Optional
 
@@ -20,6 +21,15 @@ from webui_llm_proxy.core.detection_strategies import StableCountStrategy
 
 logger = logging.getLogger(__name__)
 
+
+# Gemini 在联网搜索或思考阶段生成的提示文本列表
+GEMINI_STATUS_INDICATORS = [
+    "正在搜索网络",
+    "正在搜索",
+    "Searching",
+    "Thinking",
+    "正在思考",
+]
 
 class GeminiClient(BaseLLMClient):
     """Gemini Web UI client."""
@@ -239,15 +249,58 @@ class GeminiClient(BaseLLMClient):
 
     # ==================== Text extraction ====================
 
+
+    def _clean_status_indicators(self, text: str) -> str:
+        """清理文本开头或末尾可能夹带的 UI 状态指示器（如：正在搜索...）"""
+        if not text:
+
+            return ""
+
+        lines = text.split("\n")
+        cleaned_lines = []
+
+        for line in lines:
+            line_str = line.strip()
+
+            # 过滤完全是状态提示的行
+            is_status_line = False
+            for status in GEMINI_STATUS_INDICATORS:
+                if status in line_str and len(line_str) < 30:
+                    is_status_line = True
+                    break
+
+            if not is_status_line:
+
+                cleaned_lines.append(line)
+
+        cleaned_text = "\n".join(cleaned_lines).strip()
+        for status in GEMINI_STATUS_INDICATORS:
+
+            cleaned_text = re.sub(rf"^{re.escape(status)}...\s*", "", cleaned_text)
+            cleaned_text = re.sub(rf"\s*{re.escape(status)}...\s*$", "", cleaned_text)
+
+        return cleaned_text.strip()
+
+    def _clean_response_prefix(self, text: str) -> str:
+        """去掉 Gemini 返回文本开头的 'Gemini 说' / 'Gemini says' 等 UI 前缀"""
+        if not text:
+            return ""
+        # 兼容 'Gemini 说...'、'Gemini says...'、'Gemini: 说...' 等变体
+        return re.sub(r"^\s*Gemini\s*[:-]?\s*(?:说|says)\s*", "", text, flags=re.IGNORECASE).strip()
+
     async def _extract_response_text(self, skip_count: int = 0) -> str:
         page = self._get_page()
         try:
             responses = await page.locator(".response-content").all()
             if responses and len(responses) > skip_count:
                 text = await responses[-1].text_content()
-                return text.strip() if text else ""
+                if text:
+                    cleaned = self._clean_status_indicators(text)
+                    cleaned = self._clean_response_prefix(cleaned)
+                    return cleaned
             return ""
         except Exception as e:
+
             logger.debug(f"Extract response failed: {e}")
             return ""
 
@@ -297,16 +350,104 @@ class GeminiClient(BaseLLMClient):
         except Exception as e:
             logger.warning(f"Click new chat button failed: {e}")
 
+    async def delete_current_chat(self) -> None:
+        """删除当前/最近的 Gemini 会话"""
+        page = self._get_page()
+        logger.info("Deleting current/latest Gemini chat session...")
+
+        try:
+            # 1. 定位侧边栏会话列表
+            items = page.locator('conversations-list gem-nav-list-item[data-test-id="conversation"]')
+            if await items.count() == 0:
+                items = page.locator('gem-nav-list-item[data-test-id="conversation"]')
+            if await items.count() == 0:
+                logger.warning("No conversation items found in Gemini sidebar, nothing to delete")
+                return
+
+            # 2. 优先选择 href 与当前 URL 匹配的会话（当前打开的会话），否则取第一条（最近）
+            target = items.first
+            current_url = page.url
+            count = await items.count()
+            for i in range(count):
+                item = items.nth(i)
+                try:
+                    link = item.locator("a").first
+                    if await link.count() == 0:
+                        continue
+                    href = await link.get_attribute("href")
+                    if href and href in current_url:
+                        target = item
+                        break
+                except Exception:
+                    continue
+
+            # 3. 将目标项滚动到可视区域并悬停，以显示菜单按钮
+            try:
+                await target.scroll_into_view_if_needed()
+                await target.hover()
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.debug(f"Hover target conversation failed: {e}")
+
+            # 4. 点击会话菜单按钮
+            menu_btn = target.locator('gem-icon-button[data-test-id="actions-menu-button"] button').first
+            if await menu_btn.count() == 0:
+                menu_btn = target.locator('button[aria-label*="更多选项"], button[aria-label*="More options"]').first
+            if await menu_btn.count() == 0:
+                logger.warning("Gemini conversation actions menu button not found")
+                return
+            await menu_btn.click()
+            await asyncio.sleep(0.8)
+
+            # 5. 在弹出菜单中点击“删除”
+            delete_btn = page.get_by_role("menuitem", name=re.compile(r"Delete|删除")).first
+            if await delete_btn.count() == 0:
+                delete_btn = page.locator('[role="menuitem"]:has-text("Delete"), [role="menuitem"]:has-text("删除")').first
+            if await delete_btn.count() == 0:
+                logger.warning("Gemini delete menu option not found")
+                return
+            await delete_btn.click()
+            await asyncio.sleep(0.8)
+
+            # 6. 在确认弹窗中点击“删除”
+            confirm_btn = page.get_by_role("button", name=re.compile(r"Delete|删除")).first
+            if await confirm_btn.count() == 0:
+                confirm_btn = page.locator(
+                    'gem-button:has-text("Delete"), gem-button:has-text("删除"), '
+                    'button:has-text("Delete"), button:has-text("删除")'
+                ).first
+            if await confirm_btn.count() == 0:
+                logger.warning("Gemini confirm delete button not found")
+                return
+            await confirm_btn.click()
+            logger.info("Gemini chat session deleted successfully")
+            await asyncio.sleep(1.5)
+        except Exception as e:
+            logger.warning(f"Failed to delete Gemini chat session: {e}")
+
     async def _cleanup_after_send(self) -> None:
-        """每次调用后回到 Gemini 首页，确保下一次调用是新会话。"""
+        """每次调用后删除当前会话并回到 Gemini 首页，确保下一次调用是全新会话。"""
+        if self._cleanup_called:
+            logger.warning("Gemini cleanup already called, skipping")
+            return
+        self._cleanup_called = True
+        if settings.keep_chat:
+            logger.info("KEEP_CHAT=true, preserving Gemini session")
+            return
         logger.info("Cleaning up Gemini session...")
         try:
+            await self.delete_current_chat()
             page = self._get_page()
             await page.goto(settings.gemini.chat_url, wait_until="domcontentloaded")
             await asyncio.sleep(self._get_page_load_wait())
-            logger.info("Gemini returned to home after chat")
+            logger.info("Gemini returned to home after chat cleanup")
         except Exception as e:
             logger.warning(f"Gemini cleanup failed: {e}")
+
+    def _reset_state(self) -> None:
+        """重置每次请求的状态，并允许下一次发送后进行清理"""
+        super()._reset_state()
+        self._cleanup_called = False
 
     # ==================== Diff ====================
 

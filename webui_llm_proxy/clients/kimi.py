@@ -1461,6 +1461,70 @@ class KimiClient(BaseLLMClient):
 
     # ==================== Model selection ====================
 
+    async def _set_effort(self, page: Page, effort: str) -> None:
+        """
+        将 Kimi 模型选择菜单中的“思考强度”切换为指定值（如“标准”或“进阶”）。
+        """
+        if not effort:
+            return
+        logger.info(f"准备将 Kimi 思考强度设置为 {effort}")
+        try:
+            current_effort = await page.locator(".current-effort").first.text_content()
+            if current_effort and effort in current_effort:
+                logger.info(f"Kimi 思考强度已经是 {effort}，无需切换")
+                return
+
+            # 关闭可能已打开的模型菜单
+            try:
+                await page.keyboard.press("Escape")
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+
+            # 打开模型选择菜单
+            selector = page.locator(".current-model .model-name").first
+            if await selector.count() == 0:
+                selector = page.locator(".model-name").first
+            if await selector.count() == 0:
+                logger.warning("未找到 Kimi 模型选择按钮，无法设置思考强度")
+                return
+            await selector.click()
+            await asyncio.sleep(0.8)
+
+            # 点击“思考强度”条目展开子菜单
+            effort_item = page.locator(".effort-item").first
+            if await effort_item.count() == 0:
+                logger.warning("未找到 Kimi 思考强度选项")
+                return
+            await effort_item.click()
+            await asyncio.sleep(0.5)
+
+            # 选择目标强度
+            target_opt = page.locator(f'.effort-popover .effort-option:has-text("{effort}")').first
+            if await target_opt.count() == 0:
+                target_opt = page.locator(f'.effort-popover .effort-name:has-text("{effort}")').first
+            if await target_opt.count() == 0:
+                logger.warning(f"未找到 Kimi 思考强度“{effort}”选项")
+                return
+            await target_opt.click()
+            await asyncio.sleep(0.5)
+
+            # 关闭菜单
+            try:
+                await page.keyboard.press("Escape")
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+
+            # 验证
+            current_effort = await page.locator(".current-effort").first.text_content()
+            if current_effort and effort in current_effort:
+                logger.info(f"Kimi 思考强度已设置为 {effort} (current={current_effort.strip()})")
+            else:
+                logger.warning(f"Kimi 思考强度设置可能未生效，当前值: {current_effort}")
+        except Exception as e:
+            logger.warning(f"设置 Kimi 思考强度为 {effort} 时出错: {e}")
+
     async def _select_model(self, model_name: str = None) -> None:
         """
         在 Kimi 页面选择模型模式（K3 / K3 集群 / 快速）
@@ -1473,20 +1537,29 @@ class KimiClient(BaseLLMClient):
         if not model_name:
             return
 
+        set_effort: str | None = None
+
         # 标准化 model_name，映射到目标选项
         model_lower = model_name.lower()
         if "cluster" in model_lower or "集群" in model_lower:
             target_spec = {"includes": ["集群"], "excludes": []}
             target_label = "K3 集群"
         elif "think" in model_lower or "思考" in model_lower or "agent" in model_lower:
-            # 旧版 思考 / Agent 模式已下线，回退到 K3
-            logger.warning(f"Kimi 思考/Agent 模式已下线，'{model_name}' 回退为 K3")
-            target_spec = {"includes": ["K3"], "excludes": ["集群"]}
-            target_label = "K3"
+            if "fast" in model_lower or "快速" in model_lower or "k2.6" in model_lower or "k2" in model_lower:
+                # kimi-k2.6-think：使用快速模型，但开启思考强度“进阶”
+                target_spec = {"includes": ["快速", "K2.6"], "excludes": []}
+                target_label = "快速"
+                set_effort = "进阶"
+            else:
+                # 旧版 思考 / Agent 模式已下线，回退到 K3
+                logger.warning(f"Kimi 思考/Agent 模式已下线，'{model_name}' 回退为 K3")
+                target_spec = {"includes": ["K3"], "excludes": ["集群"]}
+                target_label = "K3"
         elif "fast" in model_lower or "快速" in model_lower or "k2.6" in model_lower or "k2" in model_lower:
             # 页面选项原 K2.6 现已更名为 快速，保留 K2.6 作为过渡期回退匹配
             target_spec = {"includes": ["快速", "K2.6"], "excludes": []}
             target_label = "快速"
+            set_effort = "标准"
         elif "max" in model_lower or "k3" in model_lower:
             target_spec = {"includes": ["K3"], "excludes": ["集群"]}
             target_label = "K3"
@@ -1538,6 +1611,8 @@ class KimiClient(BaseLLMClient):
 
             if check_result.get("already"):
                 logger.info(f"当前已是目标模型: {check_result.get('text')}")
+                if set_effort:
+                    await self._set_effort(page, set_effort)
                 return
 
             # 步骤2: 获取模型选择按钮的坐标（使用输入框为锚点）
@@ -1731,6 +1806,9 @@ class KimiClient(BaseLLMClient):
                 logger.info(f"已选择 Kimi 模型: {verify_result.get('text')}")
             else:
                 logger.warning(f"模型切换可能未生效，目标: {target_label}，请检查页面状态")
+
+            if set_effort:
+                await self._set_effort(page, set_effort)
 
         except Exception as e:
             logger.warning(f"选择 Kimi 模型时出错: {e}")
