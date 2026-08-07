@@ -13,10 +13,9 @@
 | **浏览器实例池** | 每个模型可配置 N 个独立 Chrome 实例（`PROXY_BROWSER_POOL_SIZE`），支持并发请求 |
 | **流式/非流式输出** | `stream=true/false` 自由切换，流式返回 SSE 事件流 |
 | **多模态输入** | 支持图片 URL（`image_url`）和文件上传（`/v1/chat/completions/upload`），包括代码文件（`.py` `.js` `.ts` `.java` `.c` `.cpp` 等） |
-| **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择 K3 / K3 集群 / 快速 |
+| **Kimi 模型自动切换** | 根据 `model` 名称关键词自动选择 K3 / K3 集群 / 快速，并设置对应的思考强度 |
 | **推理内容分离** | 使用 Kimi 模型（快速 / K3 / K3 集群）时，推理内容放入 `reasoning_content`，正式回答放入 `content` |
-| **Gemini 响应前缀清理** | 自动去除 Gemini 回复中的 "Gemini 说" / "Gemini says" 等 UI 前缀，只返回实际回答内容 |
-| **Gemini 会话自动清理** | 每次请求结束后自动删除当前 Gemini 会话，避免会话堆积；可通过 `--keep-chat` 或 `PROXY_KEEP_CHAT=true` 保留 |
+| **Function Calling（工具调用）** | 通过 Prompt 工程模拟 OpenAI `tools`/`tool_calls` 协议，支持多轮工具调用 |
 | **Sandbox 文件自动下载** | Kimi 生成的 Excel/Word/PPT/CSV 等 sandbox 文件，自动下载并返回可访问 URL |
 | **会话保留策略** | 检测到未下载文件时自动保留会话，方便用户手动下载 |
 | **API Key 认证** | Bearer Token 校验，支持逗号分隔多个 Key |
