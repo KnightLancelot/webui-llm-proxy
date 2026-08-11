@@ -135,6 +135,101 @@ class KimiClient(BaseLLMClient):
         super().__init__(browser, detection)
         self.model_name: str = ""
 
+    # ==================== Retry logic for Kimi server errors ====================
+
+    KIMI_RETRY_INTERVAL = 60
+    KIMI_MAX_RETRIES = 5
+
+    async def _has_server_error(self) -> bool:
+        """检测页面上是否出现 '服务端异常，请稍后重试' 等错误提示"""
+        page = self._get_page()
+        try:
+            return await page.evaluate(
+                """() => {
+                    const keywords = ['服务端异常，请稍后重试', '服务端异常'];
+                    const all = document.querySelectorAll('*');
+                    for (const el of all) {
+                        const text = (el.textContent || '').trim();
+                        for (const kw of keywords) {
+                            if (text.includes(kw)) {
+                                const rect = el.getBoundingClientRect();
+                                if (rect.width > 0 && rect.height > 0) return true;
+                            }
+                        }
+                    }
+                    return false;
+                }"""
+            )
+        except Exception as e:
+            logger.debug(f"Detect server error failed: {e}")
+            return False
+
+    async def send_message(
+        self,
+        message: str,
+        file_paths: Optional[list[str]] = None,
+        model_name: Optional[str] = None,
+    ) -> str:
+        """
+        发送消息并等待完整回复；若 Kimi 提示服务端异常，则每隔 1 分钟重试。
+        """
+        for attempt in range(1, self.KIMI_MAX_RETRIES + 1):
+            if attempt > 1:
+                logger.info(f"Kimi 第 {attempt}/{self.KIMI_MAX_RETRIES} 次尝试...")
+            try:
+                response = await super().send_message(message, file_paths=file_paths, model_name=model_name)
+            except Exception as e:
+                logger.warning(f"Kimi send_message 第 {attempt} 次失败: {e}")
+                response = ""
+            if response and response.strip():
+                return response
+            if await self._has_server_error():
+                logger.warning(f"Kimi 检测到服务端异常，{self.KIMI_RETRY_INTERVAL} 秒后重试...")
+            else:
+                logger.warning(f"Kimi 未获取到回复，{self.KIMI_RETRY_INTERVAL} 秒后重试...")
+            if attempt < self.KIMI_MAX_RETRIES:
+                await asyncio.sleep(self.KIMI_RETRY_INTERVAL)
+        logger.error("Kimi 达到最大重试次数，返回空响应")
+        return ""
+
+    async def send_message_stream(
+        self,
+        message: str,
+        file_paths: Optional[list[str]] = None,
+        model_name: Optional[str] = None,
+        on_chunk: Optional[Callable[[str], None]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        流式发送消息；若 Kimi 提示服务端异常，则每隔 1 分钟重试。
+        """
+        for attempt in range(1, self.KIMI_MAX_RETRIES + 1):
+            if attempt > 1:
+                logger.info(f"Kimi 第 {attempt}/{self.KIMI_MAX_RETRIES} 次流式尝试...")
+            chunk_count = 0
+            try:
+                async for chunk in super().send_message_stream(
+                    message,
+                    file_paths=file_paths,
+                    model_name=model_name,
+                    on_chunk=on_chunk,
+                ):
+                    if chunk:
+                        chunk_count += 1
+                        yield chunk
+                if chunk_count > 0:
+                    return
+            except Exception as e:
+                logger.warning(f"Kimi send_message_stream 第 {attempt} 次失败: {e}")
+                if chunk_count > 0:
+                    return
+            if await self._has_server_error():
+                logger.warning(f"Kimi 检测到服务端异常，{self.KIMI_RETRY_INTERVAL} 秒后重试...")
+            else:
+                logger.warning(f"Kimi 未获取到流式回复，{self.KIMI_RETRY_INTERVAL} 秒后重试...")
+            if attempt < self.KIMI_MAX_RETRIES:
+                await asyncio.sleep(self.KIMI_RETRY_INTERVAL)
+        logger.error("Kimi 达到最大流式重试次数")
+
     # ==================== Required hooks ====================
 
     def _get_chat_url(self) -> str:
@@ -1425,6 +1520,11 @@ class KimiClient(BaseLLMClient):
         return media_files
 
     # ==================== Cleanup ====================
+
+    def _reset_state(self) -> None:
+        """重置每次请求的状态，确保下一次请求能正常执行清理"""
+        super()._reset_state()
+        self._cleanup_called = False
 
     async def _cleanup_after_send(self) -> None:
         if self._cleanup_called:
